@@ -7,6 +7,7 @@ from powertrain_codes import pcodes
 from network_codes    import ucodes
 import threading
 import Queue
+import random
 
 GET_DTC_COMMAND   = "03"
 CLEAR_DTC_COMMAND = "04"
@@ -42,9 +43,7 @@ def decrypt_dtc_code(code):
     return dtc
 #__________________________________________________________________________
 
-def obd_debug(s):
-    print "debug:",str(s)
-
+ 
 class OBDPort:
      """ OBDPort abstracts all communication with OBD-II device."""
      def __init__(self,device):
@@ -55,26 +54,30 @@ class OBDPort:
          par      = serial.PARITY_NONE  # parity
          sb       = 1                   # stop bits
          to       = 2
-
+         self.dfile=open('obd.log','w')
          try:
              self.port = serial.Serial(device,baud, \
              parity = par, stopbits = sb, bytesize = databits,timeout = to)
          except "FIXME": #serial.serialutil.SerialException:
              raise "PortFailed"
 
-         obd_debug(self.port.portstr)
+         self.obd_debug(self.port.portstr)
          ready = "ERROR"
 	 #self.send_command("01 00")
 	 #obd_debug(self.get_result())
          while ready == "ERROR":
              self.send_command("atz")   # initialize
-             obd_debug(self.get_result())
+             self.obd_debug(self.get_result())
              self.send_command("ate0")  # echo off
-             obd_debug(self.get_result())
+             self.obd_debug(self.get_result())
              self.send_command("01 00") #check available commands for Mode 01
-             ready = self.get_result()[-6:-1]
-             print ready
+             astr=self.get_result()
+             ready = astr[-6:-1]
+             self.obd_debug(astr)
+         self.obd_debug("Port initilized")
      
+     def obd_debug(self,s):
+         print >> self.dfile,"debug:",str(s)
      def close(self):
          """ Resets device and closes all associated filehandles"""
          self.port.send_command("atz")
@@ -100,6 +103,7 @@ class OBDPort:
          # '41 11 0 0\r\r'
          
          # 9 seems to be the length of the shortest valid response
+         self.obd_debug('interpreting code '+str(code))
          if len(code) < 7:
              raise "BogusCode"
           
@@ -144,14 +148,15 @@ class OBDPort:
              if data != "NODATA":
                  data = sensor.value(data)
          else:
-             raise "NORESPONSE"
+             raise Exception("NORESPONSE")
          return data
 
      # return string of sensor name and value from sensor index
      def sensor(self , sensor_index):
          """Returns 3-tuple of given sensors. 3-tuple consists of
          (Sensor Name (string), Sensor Value (string), Sensor Unit (string) ) """
-         sensor = obd_sensors.SENSORS[sensor_index]
+         self.obd_debug('reading sensor '+str(sensor_index))
+         sensor = obd_sensors.SENSORS[int(sensor_index)]
          try:
              r = self.get_sensor_value(sensor)
          except "NORESPONSE":
@@ -200,6 +205,24 @@ class OBDPort:
                     file.write(line)
                     file.flush()
          
+class OBDPortTest(OBDPort):
+ '''
+ Class for testing gui functionality
+ '''
+ def __init__(self,device):
+  pass
+ def close(self):
+  pass
+ def sensor(self , sensor_index):
+    sensor = obd_sensors.SENSORS[sensor_index]
+    time.sleep(0.1)
+    result=str(random.uniform(0,1))  
+    if sensor_index==0:
+     result='0011111000'  
+    return (sensor.name,result, sensor.unit)
+ def clear_dtc(self):
+  pass
+          
 class sensorThread(threading.Thread):
  """
     This class is to submit jobs in parallel
@@ -230,9 +253,13 @@ class OBDsensor:
         self.value = self.port.sensor(self.id)
              
 class sensorReader:
-        def __init__(self,p):
+        def __init__(self,p,sensors):
+            '''
+            p - OBD port 
+            sensor - binary string that describes which sensors to display
+            '''
             self.port= p
-            self.supp = p.sensor(0)[1]
+            self.supp = sensors #p.sensor(0)[1]
             self.populate()
             
         def populate(self):             
