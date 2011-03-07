@@ -17,7 +17,9 @@ class OBDGui:
   self.mode='main'
   self.options=options
   self.currcur=-1
-
+  self.dlog=open('gui.log','w')
+ def debug(self,str):
+  print >> self.dlog,str
  def drawFrame(self):
   self.screen.clear()
   if self.mode=='main':self.infostr='q: quit, o: open port'
@@ -50,9 +52,15 @@ class OBDGui:
 
  def openport(self):
   try:
-   self.port=obd_io.OBDPort(self.options.port)
-   self.port.obd_debug('Read available sensors')
+   import time
+   self.debug('start open port')
+   if self.options.port=='test':
+    self.port=obd_io.OBDPortTest(self.options.port)
+   else:
+    self.port=obd_io.OBDPort(self.options.port)
+   self.debug('port initialized, reading available sensors')
    self.sensorStr=self.port.sensor(0)[1]
+   self.debug(self.sensorStr)   
    self.sensorReader=obd_io.sensorReader(self.port,self.sensorStr)
    self.sensorReader.start()
    self.sensorReader.refresh()
