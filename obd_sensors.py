@@ -41,13 +41,34 @@ def cpass(code):
     #fixme
     return code
 
+def fuel_status(code):
+ '''
+ From wiki:
+ A0     Open loop due to insufficient engine temperature
+ A1     Closed loop, using oxygen sensor feedback to determine fuel mix
+ A2     Open loop due to engine load OR fuel cut due to deacceleration 
+ A3     Open loop due to system failure
+ A4     Closed loop, using at least one oxygen sensor but there is a fault in the feedback system
+ '''
+ msgs=['Open(low temp)','Closed','Open(load)','Open(sys fail)','Closed(fault)']
+ a=hex_to_bitstring(code)
+ print 'Fuel system status received : ',a 
+ for i in len(a):
+  if a[i]=="1": return msgs[i]  
+
 def fuel_trim_percent(code):
     code = int(code,16)
     return (code - 128.0) * 100.0 / 128.0
 
-def fuel_trim_percent_sensor(code):
-    code = int(code,16)
-    return (code - 256) * 100.0 / 256
+def fuel_trim_volt_sensor(code):
+    ''' From wiki:
+    A * 0.005
+    (B-128) * 100/128
+    '''
+    A = int(code[0:2],16)
+#    if code[2:4]=='FF': return 'not used'
+#    B = int(code[2:4],16)
+    return A*0.005
 
 def dtc_decrypt(code):
     num = int(code[0],16)
@@ -74,7 +95,7 @@ SENSORS = [
     Sensor("          Supported PIDs", "0100", hex_to_bitstring  ,""       ),    
     Sensor("Status Since DTC Cleared", "0101", dtc_decrypt       ,""       ),    
     Sensor("DTC Causing Freeze Frame", "0102", cpass             ,""       ),    
-    Sensor("      Fuel System Status", "0103", cpass             ,""       ),
+    Sensor("      Fuel System Status", "0103", fuel_status             ,""       ),
     Sensor("   Calculated Load Value", "0104", percent_scale     ,""       ),    
     Sensor("     Coolant Temperature", "0105", temp              ,"C"      ),
     Sensor("    Short Term Fuel Trim Bank 1", "0106", fuel_trim_percent ,"%"      ),
@@ -91,8 +112,8 @@ SENSORS = [
     Sensor("       Throttle Position", "0111", throttle_pos      ,"%"      ),
     Sensor("    Secondary Air Status", "0112", cpass             ,""       ),
     Sensor("  Location of O2 sensors", "0113", cpass             ,""       ),
-    Sensor("        O2 Sensor: 1 - 1", "0114", fuel_trim_percent_sensor ,"%"      ),
-    Sensor("        O2 Sensor: 1 - 2", "0115", fuel_trim_percent_sensor ,"%"      ),
+    Sensor("        O2 Sensor: 1 - 1", "0114", fuel_trim_volt_sensor ,"V"      ),
+    Sensor("        O2 Sensor: 1 - 2", "0115", fuel_trim_volt_sensor ,"V"      ),
     Sensor("        O2 Sensor: 1 - 3", "0116", fuel_trim_percent ,"%"      ),
     Sensor("        O2 Sensor: 1 - 4", "0117", fuel_trim_percent ,"%"      ),
     Sensor("        O2 Sensor: 2 - 1", "0118", fuel_trim_percent ,"%"      ),
