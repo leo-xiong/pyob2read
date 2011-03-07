@@ -43,10 +43,43 @@ def decrypt_dtc_code(code):
     return dtc
 #__________________________________________________________________________
 
+class debugPort(object):
  
-class OBDPort:
+ def __init__(self):
+  self.dfile=open('obd.log','w')
+  
+ def debug(self,s):
+  print >> self.dfile,"debug:",str(s)
+ 
+class fakeSerialDevice(): 
+ msg=''
+ ci=0
+ def flushOutput(self):
+  pass
+ def flushInput(self):
+  pass
+ def write(self,msg):
+  if msg=='\r': return
+  self.msg+=msg
+ def read(self,N=1):
+  dict={'03':'43 01 33 00 00 00 00>'
+        }
+  if self.msg in dict.keys():
+   res=dict[self.msg.strip()][self.ci]
+   self.ci+=1
+   if res=='>': 
+    self.msg=''
+    self.ci=0
+  else:
+   res='>'
+   self.msg=''
+   self.ci=0
+  return res
+  
+class OBDPort(debugPort):
      """ OBDPort abstracts all communication with OBD-II device."""
      def __init__(self,device):
+         debugPort.__init__(self)
          """Initializes port by resetting device and gettings supported PIDs. """
          # These should really be set by the user.
          baud     = 9600 #10400 #38400  #9600
@@ -54,30 +87,32 @@ class OBDPort:
          par      = serial.PARITY_NONE  # parity
          sb       = 1                   # stop bits
          to       = 2
-         self.dfile=open('obd.log','w')
+         
          try:
              self.port = serial.Serial(device,baud, \
              parity = par, stopbits = sb, bytesize = databits,timeout = to)
          except "FIXME": #serial.serialutil.SerialException:
              raise "PortFailed"
 
-         self.obd_debug(self.port.portstr)
+         self.debug(self.port.portstr)
          ready = "ERROR"
 	 #self.send_command("01 00")
-	 #obd_debug(self.get_result())
+	 #debug(self.get_result())
          while ready == "ERROR":
              self.send_command("atz")   # initialize
-             self.obd_debug(self.get_result())
+             self.debug(self.get_result())
              self.send_command("ate0")  # echo off
-             self.obd_debug(self.get_result())
+             self.debug(self.get_result())
              self.send_command("01 00") #check available commands for Mode 01
              astr=self.get_result()
+             if astr.strip()=='UNABLE TO CONNECT':
+              self.debug('retrying ..')
+              continue
              ready = astr[-6:-1]
-             self.obd_debug(astr)
-         self.obd_debug("Port initilized")
+             self.debug(astr)
+         self.debug("Port initilized")
      
-     def obd_debug(self,s):
-         print >> self.dfile,"debug:",str(s)
+     
      def close(self):
          """ Resets device and closes all associated filehandles"""
          self.port.send_command("atz")
@@ -103,7 +138,7 @@ class OBDPort:
          # '41 11 0 0\r\r'
          
          # 9 seems to be the length of the shortest valid response
-         self.obd_debug('interpreting code '+str(code))
+         self.debug('interpreting code '+str(code))
          if len(code) < 7:
              raise "BogusCode"
           
@@ -155,7 +190,7 @@ class OBDPort:
      def sensor(self , sensor_index):
          """Returns 3-tuple of given sensors. 3-tuple consists of
          (Sensor Name (string), Sensor Value (string), Sensor Unit (string) ) """
-         self.obd_debug('reading sensor '+str(sensor_index))
+         self.debug('reading sensor '+str(sensor_index))
          sensor = obd_sensors.SENSORS[int(sensor_index)]
          try:
              r = self.get_sensor_value(sensor)
@@ -210,7 +245,8 @@ class OBDPortTest(OBDPort):
  Class for testing gui functionality
  '''
  def __init__(self,device):
-  pass
+  self.port=fakeSerialDevice()
+  
  def close(self):
   pass
  def sensor(self , sensor_index):
@@ -296,13 +332,13 @@ class sensorReader:
         
 # __________________________________________________________    
 def test():
-    p = OBDPort('/dev/ttyACM0')
+    p = OBDPortTest('/dev/ttyACM0')
     codes=decrypt_dtc_code(p.get_dtc())
     for code in codes:
         print code,pcodes[code]
-    areader=sensorReader(p)
-    areader.start()
-    areader.loopread()
+#    areader=sensorReader(p)
+#    areader.start()
+#    areader.loopread()
            
 
 if __name__ == "__main__":
